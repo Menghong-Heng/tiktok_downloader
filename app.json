@@ -1,0 +1,23 @@
+{
+  "name": "TikTok Downloader Bot",
+  "description": "A Telegram bot that downloads TikTok videos without watermarks",
+  "repository": "https://github.com/Menghong-Heng/tiktok_downloader",
+  "keywords": ["python", "telegram", "bot", "tiktok", "downloader"],
+  "env": {
+    "TOKEN": {
+      "description": "Your Telegram Bot Token from @BotFather",
+      "required": true
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  }
+}
