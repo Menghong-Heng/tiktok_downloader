@@ -31,13 +31,45 @@ async def extract_video_id(url: str) -> Optional[str]:
     
     return None
 
+def get_video_dimensions(input_bytes: bytes) -> tuple:
+    """Return (width, height) of video using ffprobe."""
+    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as in_file:
+        in_file.write(input_bytes)
+        in_file.flush()
+        cmd = [
+            'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+            '-show_entries', 'stream=width,height',
+            '-of', 'json', in_file.name
+        ]
+        try:
+            result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            info = json.loads(result.stdout)
+            width = info['streams'][0]['width']
+            height = info['streams'][0]['height']
+            return width, height
+        except Exception as e:
+            print(f"ffprobe failed: {e}")
+            return None, None
+
 def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
-    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg, crop to 9:16 (720x1280) portrait, remove all metadata and rotation info. This ensures no black bars and a full-frame experience on Telegram/iOS."""
+    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg, with dynamic filter for portrait/landscape."
+    """
+    width, height = get_video_dimensions(input_bytes)
+    if width is None or height is None:
+        # fallback: use crop
+        portrait = False
+    else:
+        portrait = height > width
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as in_file, \
          tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as out_file:
         in_file.write(input_bytes)
         in_file.flush()
-        vf = "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1"
+        if portrait:
+            # Portrait: scale and pad, never stretch
+            vf = "scale=iw*min(720/iw\\,1280/ih):ih*min(720/iw\\,1280/ih),pad=720:1280:(720-iw*min(720/iw\\,1280/ih))/2:(1280-ih*min(720/iw\\,1280/ih))/2,setsar=1"
+        else:
+            # Landscape or square: crop to fill
+            vf = "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1"
         cmd = [
             'ffmpeg',
             '-analyzeduration', '2147483647',
