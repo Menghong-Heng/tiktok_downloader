@@ -3,7 +3,7 @@ import httpx
 import re
 import json
 import urllib.parse
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 async def resolve_redirect(url: str) -> str:
     """Resolve TikTok redirects to get the final URL"""
@@ -107,4 +107,48 @@ async def fetch_video(tiktok_url: str) -> Tuple[Optional[BytesIO], Optional[str]
         
     except Exception as e:
         print(f"⚠️ Download error: {e}")
+        return None, None
+
+async def fetch_photos(tiktok_url: str) -> Tuple[Optional[List[BytesIO]], Optional[str]]:
+    """Fetch TikTok photo post images using TikWM API"""
+    try:
+        # Resolve redirects
+        resolved_url = await resolve_redirect(tiktok_url)
+        print(f"Resolved URL: {resolved_url}")
+
+        service_url = "https://tikwm.com/api/"
+        data = {
+            'url': tiktok_url,
+            'hd': '1'
+        }
+        service_headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Origin': 'https://tikwm.com',
+            'Referer': 'https://tikwm.com/',
+        }
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(service_url, data=data, headers=service_headers)
+            print(f"TikWM API response: {response.status_code}")
+            if response.status_code == 200:
+                try:
+                    data = response.json()
+                    if data.get('code') == 0:
+                        # Check if it's a photo post
+                        images = data.get('data', {}).get('images')
+                        if images and isinstance(images, list):
+                            buffers = []
+                            for img_url in images:
+                                img_resp = await client.get(img_url, timeout=30)
+                                if img_resp.status_code == 200:
+                                    buffers.append(BytesIO(img_resp.content))
+                            if buffers:
+                                caption = f"Downloaded TikTok Photo Post - {data.get('data', {}).get('title', 'TikTok Photos')}"
+                                return buffers, caption
+                except json.JSONDecodeError:
+                    print("Failed to parse TikWM JSON response for photos")
+        return None, None
+    except Exception as e:
+        print(f"⚠️ Photo download error: {e}")
         return None, None
