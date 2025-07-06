@@ -51,6 +51,21 @@ def get_video_dimensions(input_bytes: bytes) -> tuple:
             print(f"ffprobe failed: {e}")
             return None, None
 
+def check_h264_codec(file_path: str) -> bool:
+    """Return True if the video stream in file_path is H.264, else False."""
+    cmd = [
+        'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+        '-show_entries', 'stream=codec_name',
+        '-of', 'default=noprint_wrappers=1:nokey=1', file_path
+    ]
+    try:
+        result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        codec = result.stdout.decode().strip()
+        return codec == 'h264'
+    except Exception as e:
+        print(f"ffprobe codec check failed: {e}")
+        return False
+
 def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
     """
     Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg.
@@ -80,7 +95,7 @@ def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
             '-probesize', '2147483647',
             '-y', '-i', in_file.name,
             '-vf', vf,
-            '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
+            '-c:v', 'libx264', '-profile:v', 'high', '-crf', '23', '-preset', 'fast', '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
             '-map_metadata', '-1',
@@ -90,6 +105,9 @@ def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
         ]
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            # Post-process: check codec
+            if not check_h264_codec(out_file.name):
+                print("WARNING: Output video is not H.264! Telegram/iOS compatibility may be affected.")
             out_file.seek(0)
             return out_file.read()
         except Exception as e:
