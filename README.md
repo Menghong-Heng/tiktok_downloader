@@ -59,21 +59,28 @@ A powerful Telegram bot that downloads TikTok videos and photo posts (carousels)
    - Send `/help` for usage instructions
    - Paste any TikTok link to download the video or photo post
 
-## 📱 Supported URL Formats
+## 📦 Deployment
 
-- `https://www.tiktok.com/@user/video/1234567890`
-- `https://vt.tiktok.com/xxxxx/`
-- `https://vm.tiktok.com/xxxxx/`
-- Any other TikTok URL format
+You can deploy this bot easily using Docker or Railway.
 
-## 🔧 How It Works
+### Docker
 
-1. **URL Processing**: Resolves short URLs and extracts video IDs
-2. **API Integration**: Uses TikWM API for reliable downloads
-3. **Photo Post Detection**: Automatically detects and downloads all images from TikTok photo carousels
-4. **Quality Selection**: Prioritizes HD quality when available
-5. **File Handling**: Manages file sizes and formats for Telegram
-6. **User Feedback**: Provides real-time progress updates
+1. **Build and run with Docker Compose:**
+   ```bash
+   docker-compose up --build
+   ```
+   Or build and run manually:
+   ```bash
+   docker build -t tiktok-bot .
+   docker run --env-file .env tiktok-bot
+   ```
+
+### Railway
+
+1. **Deploy to Railway:**
+   - Click the "Deploy on Railway" button (if available) or create a new Railway project and connect your repo.
+   - Set the `TOKEN` environment variable in Railway dashboard.
+   - Railway will use the `Procfile` and `runtime.txt` for deployment.
 
 ## 📁 Project Structure
 
@@ -82,9 +89,14 @@ Telegram_TIktok/
 ├── bot.py              # Main bot application
 ├── downloader.py       # TikTok video & photo downloader
 ├── requirements.txt    # Python dependencies
-├── .env               # Environment variables (not in repo)
-├── .gitignore         # Git ignore rules
-└── README.md          # This file
+├── .env                # Environment variables (not in repo)
+├── .gitignore          # Git ignore rules
+├── README.md           # This file
+├── Dockerfile          # Docker build instructions
+├── docker-compose.yml  # Docker Compose for local deployment
+├── Procfile            # Railway/Heroku process file
+├── app.json            # Railway/Heroku app metadata
+├── runtime.txt         # Python runtime version
 ```
 
 ## 🛡️ Security
