@@ -1,10 +1,11 @@
 # TikTok Downloader Telegram Bot
 
-A powerful Telegram bot that downloads TikTok videos without watermarks. Built with Python and the python-telegram-bot library.
+A powerful Telegram bot that downloads TikTok videos and photo posts (carousels) without watermarks. Built with Python and the python-telegram-bot library.
 
 ## 🚀 Features
 
 - ✅ **No Watermark Downloads** - Get clean TikTok videos without watermarks
+- ✅ **TikTok Photo Post Support** - Download all images from TikTok photo carousels
 - ✅ **HD Quality Support** - Automatically downloads the highest available quality
 - ✅ **Multiple URL Formats** - Supports all TikTok URL formats (short links, full URLs)
 - ✅ **Fast Processing** - Optimized for quick downloads
@@ -56,7 +57,7 @@ A powerful Telegram bot that downloads TikTok videos without watermarks. Built w
 2. **Use the bot**
    - Send `/start` to see the welcome message
    - Send `/help` for usage instructions
-   - Paste any TikTok link to download the video
+   - Paste any TikTok link to download the video or photo post
 
 ## 📱 Supported URL Formats
 
@@ -69,16 +70,17 @@ A powerful Telegram bot that downloads TikTok videos without watermarks. Built w
 
 1. **URL Processing**: Resolves short URLs and extracts video IDs
 2. **API Integration**: Uses TikWM API for reliable downloads
-3. **Quality Selection**: Prioritizes HD quality when available
-4. **File Handling**: Manages file sizes and formats for Telegram
-5. **User Feedback**: Provides real-time progress updates
+3. **Photo Post Detection**: Automatically detects and downloads all images from TikTok photo carousels
+4. **Quality Selection**: Prioritizes HD quality when available
+5. **File Handling**: Manages file sizes and formats for Telegram
+6. **User Feedback**: Provides real-time progress updates
 
 ## 📁 Project Structure
 
 ```
 Telegram_TIktok/
 ├── bot.py              # Main bot application
-├── downloader.py       # TikTok video downloader
+├── downloader.py       # TikTok video & photo downloader
 ├── requirements.txt    # Python dependencies
 ├── .env               # Environment variables (not in repo)
 ├── .gitignore         # Git ignore rules
@@ -95,12 +97,12 @@ Telegram_TIktok/
 
 - **Primary**: TikWM API (most reliable)
 - **Fallback**: Direct TikTok API
-- **Features**: HD quality, no watermark, fast processing
+- **Features**: HD quality, no watermark, fast processing, photo post support
 
 ## 📊 Performance
 
-- **Download Speed**: Typically 5-15 seconds per video
-- **Success Rate**: >95% for public videos
+- **Download Speed**: Typically 5-15 seconds per video or photo post
+- **Success Rate**: >95% for public videos and photo posts
 - **File Size Limit**: 50MB (Telegram bot limit)
 - **Quality**: HD when available, standard as fallback
 
@@ -108,16 +110,16 @@ Telegram_TIktok/
 
 ### Common Issues
 
-1. **"Video too large"**
+1. **"Video or photo too large"**
 
-   - Try a shorter video
+   - Try a shorter video or smaller photo post
    - Telegram bot limit is 50MB
 
-2. **"Failed to download video"**
+2. **"Failed to download video or photo"**
 
-   - Video might be private or deleted
+   - Video or photo post might be private or deleted
    - Check your internet connection
-   - Try again or use a different video
+   - Try again or use a different link
 
 3. **"Invalid TikTok link"**
    - Make sure the URL contains "tiktok.com"
@@ -126,7 +128,7 @@ Telegram_TIktok/
 ### Error Messages
 
 - **403 Forbidden**: API rate limit or region restriction
-- **404 Not Found**: Video doesn't exist or is private
+- **404 Not Found**: Video or photo doesn't exist or is private
 - **Timeout**: Network issues, try again
 
 ## 🤝 Contributing
