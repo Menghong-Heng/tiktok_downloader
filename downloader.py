@@ -32,20 +32,24 @@ async def extract_video_id(url: str) -> Optional[str]:
     return None
 
 def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
-    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg, force 9:16 aspect (720x1280) with padding and remove rotation metadata."""
+    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg, force 9:16 aspect (720x1280) with padding, remove all metadata and rotation info."""
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as in_file, \
          tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as out_file:
         in_file.write(input_bytes)
         in_file.flush()
-        # ffmpeg command: scale to fit 720x1280, pad to 720x1280, keep aspect, no stretch, remove rotation metadata
         vf = "scale=w=720:h=1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2"
         cmd = [
-            'ffmpeg', '-y', '-i', in_file.name,
+            'ffmpeg',
+            '-analyzeduration', '2147483647',
+            '-probesize', '2147483647',
+            '-y', '-i', in_file.name,
             '-vf', vf,
             '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
+            '-map_metadata', '-1',
             '-metadata:s:v', 'rotate=0',
+            '-threads', '1',
             out_file.name
         ]
         try:
