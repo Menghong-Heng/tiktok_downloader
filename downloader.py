@@ -54,26 +54,26 @@ def get_video_dimensions(input_bytes: bytes) -> tuple:
 def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
     """
     Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg.
-    - For portrait: scale and pad to 720x1280 (no stretch, no crop)
-    - For landscape/square: crop to fill 720x1280 (no black bars)
-    This matches TikTok's look and ensures no stretching or black bars unless original is portrait.
+    - For portrait: crop to 9:16 (centered), scale to 720x1280, setsar=1
+    - For landscape: crop to 16:9 (centered), scale to 1280x720, setsar=1
+    This matches Stack Overflow best practices for Telegram/iOS display.
     """
     width, height = get_video_dimensions(input_bytes)
     if width is None or height is None:
-        # fallback: treat as landscape
-        portrait = False
+        # fallback: treat as portrait
+        portrait = True
     else:
-        portrait = height > width
+        portrait = height >= width
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as in_file, \
          tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as out_file:
         in_file.write(input_bytes)
         in_file.flush()
         if portrait:
-            # Portrait: scale and pad, never stretch or crop
-            vf = "scale=iw*min(720/iw\\,1280/ih):ih*min(720/iw\\,1280/ih),pad=720:1280:(720-iw*min(720/iw\\,1280/ih))/2:(1280-ih*min(720/iw\\,1280/ih))/2,setsar=1"
+            # Portrait: crop to 9:16, scale to 720x1280, setsar=1
+            vf = "crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=720:1280,setsar=1"
         else:
-            # Landscape or square: crop to fill
-            vf = "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1"
+            # Landscape: crop to 16:9, scale to 1280x720, setsar=1
+            vf = "crop=iw:iw*9/16:0:(ih-iw*9/16)/2,scale=1280:720,setsar=1"
         cmd = [
             'ffmpeg',
             '-analyzeduration', '2147483647',
