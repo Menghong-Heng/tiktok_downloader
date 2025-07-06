@@ -32,14 +32,16 @@ async def extract_video_id(url: str) -> Optional[str]:
     return None
 
 def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
-    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg."""
+    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg, force 9:16 aspect (720x1280) with padding."""
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as in_file, \
          tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as out_file:
         in_file.write(input_bytes)
         in_file.flush()
-        # ffmpeg command: force H.264 video, AAC audio, yuv420p pixel format, keep aspect
+        # ffmpeg command: scale to fit 720x1280, pad to 720x1280, keep aspect, no stretch
+        vf = "scale=iw*min(720/iw\\,1280/ih):ih*min(720/iw\\,1280/ih),pad=720:1280:(720-iw*min(720/iw\\,1280/ih))/2:(1280-ih*min(720/iw\\,1280/ih))/2"
         cmd = [
             'ffmpeg', '-y', '-i', in_file.name,
+            '-vf', vf,
             '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
@@ -52,6 +54,32 @@ def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
         except Exception as e:
             print(f"ffmpeg conversion failed: {e}")
             return input_bytes
+
+async def tikwm_api_request(tiktok_url: str) -> Optional[dict]:
+    """Helper to call TikWM API and return parsed JSON or None."""
+    service_url = "https://tikwm.com/api/"
+    data = {
+        'url': tiktok_url,
+        'hd': '1'
+    }
+    service_headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Origin': 'https://tikwm.com',
+        'Referer': 'https://tikwm.com/',
+    }
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(service_url, data=data, headers=service_headers)
+        print(f"TikWM API response: {response.status_code}")
+        if response.status_code == 200:
+            try:
+                data = response.json()
+                if data.get('code') == 0:
+                    return data
+            except json.JSONDecodeError:
+                print("Failed to parse TikWM JSON response")
+    return None
 
 async def fetch_video(tiktok_url: str) -> Tuple[Optional[BytesIO], Optional[str]]:
     """Fetch TikTok video without watermark - optimized version"""
@@ -70,41 +98,18 @@ async def fetch_video(tiktok_url: str) -> Tuple[Optional[BytesIO], Optional[str]
         
         # Primary method: TikWM API (POST) - most reliable
         try:
-            service_url = "https://tikwm.com/api/"
-            data = {
-                'url': tiktok_url,
-                'hd': '1'
-            }
-            
-            service_headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                'Accept': 'application/json, text/plain, */*',
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Origin': 'https://tikwm.com',
-                'Referer': 'https://tikwm.com/',
-            }
-            
-            async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.post(service_url, data=data, headers=service_headers)
-                print(f"TikWM API response: {response.status_code}")
-                
-                if response.status_code == 200:
-                    try:
-                        data = response.json()
-                        
-                        if data.get('code') == 0:
-                            # Try HD first, then fallback to regular
-                            video_url = data.get('data', {}).get('hdplay') or data.get('data', {}).get('play')
-                            if video_url:
-                                video_response = await client.get(video_url, timeout=60)
-                                if video_response.status_code == 200:
-                                    # Convert to standard MP4
-                                    converted_bytes = convert_to_standard_mp4(video_response.content)
-                                    buffer = BytesIO(converted_bytes)
-                                    quality = "HD" if data.get('data', {}).get('hdplay') else "Standard"
-                                    return buffer, f"Downloaded via TikWM ({quality}) - {data.get('data', {}).get('title', 'TikTok Video')}"
-                    except json.JSONDecodeError:
-                        print("Failed to parse TikWM JSON response")
+            tikwm_data = await tikwm_api_request(tiktok_url)
+            if tikwm_data:
+                video_url = tikwm_data.get('data', {}).get('hdplay') or tikwm_data.get('data', {}).get('play')
+                if video_url:
+                    async with httpx.AsyncClient(timeout=60) as client:
+                        video_response = await client.get(video_url)
+                        if video_response.status_code == 200:
+                            # Convert to standard MP4
+                            converted_bytes = convert_to_standard_mp4(video_response.content)
+                            buffer = BytesIO(converted_bytes)
+                            quality = "HD" if tikwm_data.get('data', {}).get('hdplay') else "Standard"
+                            return buffer, f"Downloaded via TikWM ({quality}) - {tikwm_data.get('data', {}).get('title', 'TikTok Video')}"
         except Exception as e:
             print(f"TikWM API failed: {e}")
         
@@ -144,38 +149,19 @@ async def fetch_photos(tiktok_url: str) -> Tuple[Optional[List[BytesIO]], Option
         resolved_url = await resolve_redirect(tiktok_url)
         print(f"Resolved URL: {resolved_url}")
 
-        service_url = "https://tikwm.com/api/"
-        data = {
-            'url': tiktok_url,
-            'hd': '1'
-        }
-        service_headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json, text/plain, */*',
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'Origin': 'https://tikwm.com',
-            'Referer': 'https://tikwm.com/',
-        }
-        async with httpx.AsyncClient(timeout=30) as client:
-            response = await client.post(service_url, data=data, headers=service_headers)
-            print(f"TikWM API response: {response.status_code}")
-            if response.status_code == 200:
-                try:
-                    data = response.json()
-                    if data.get('code') == 0:
-                        # Check if it's a photo post
-                        images = data.get('data', {}).get('images')
-                        if images and isinstance(images, list):
-                            buffers = []
-                            for img_url in images:
-                                img_resp = await client.get(img_url, timeout=30)
-                                if img_resp.status_code == 200:
-                                    buffers.append(BytesIO(img_resp.content))
-                            if buffers:
-                                caption = f"Downloaded TikTok Photo Post - {data.get('data', {}).get('title', 'TikTok Photos')}"
-                                return buffers, caption
-                except json.JSONDecodeError:
-                    print("Failed to parse TikWM JSON response for photos")
+        tikwm_data = await tikwm_api_request(tiktok_url)
+        if tikwm_data:
+            images = tikwm_data.get('data', {}).get('images')
+            if images and isinstance(images, list):
+                buffers = []
+                async with httpx.AsyncClient(timeout=30) as client:
+                    for img_url in images:
+                        img_resp = await client.get(img_url)
+                        if img_resp.status_code == 200:
+                            buffers.append(BytesIO(img_resp.content))
+                if buffers:
+                    caption = f"Downloaded TikTok Photo Post - {tikwm_data.get('data', {}).get('title', 'TikTok Photos')}"
+                    return buffers, caption
         return None, None
     except Exception as e:
         print(f"⚠️ Photo download error: {e}")

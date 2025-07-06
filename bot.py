@@ -59,6 +59,12 @@ The bot will automatically:
 If you encounter any issues, try again or contact support."""
     await update.message.reply_text(help_text)
 
+async def update_status_message(status_message, text):
+    try:
+        await status_message.edit_text(text)
+    except Exception:
+        pass
+
 # Message handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None:
@@ -83,43 +89,43 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # Try photo post first
-        await status_message.edit_text("🔄 Checking if this is a TikTok photo post...")
+        await update_status_message(status_message, "🔄 Checking if this is a TikTok photo post...")
         photo_buffers, photo_caption = await fetch_photos(text)
         if photo_buffers:
-            await status_message.edit_text("📸 Downloading TikTok photo post...\n\n📤 Uploading to Telegram...")
+            await update_status_message(status_message, "📸 Downloading TikTok photo post...\n\n📤 Uploading to Telegram...")
             for idx, img_buffer in enumerate(photo_buffers):
                 await update.message.reply_photo(
                     photo=InputFile(img_buffer, filename=f"tiktok_photo_{idx+1}.jpg"),
                     caption=photo_caption if idx == 0 else None
                 )
-            await status_message.edit_text("✅ TikTok photo post downloaded successfully!\n\n🎉 Enjoy your TikTok photos!")
+            await update_status_message(status_message, "✅ TikTok photo post downloaded successfully!\n\n🎉 Enjoy your TikTok photos!")
             await asyncio.sleep(5)
             await status_message.delete()
             return
 
         # Not a photo post, try video as before
-        await status_message.edit_text("🔄 Processing your TikTok video...\n\n⏳ Resolving URL and extracting video...")
+        await update_status_message(status_message, "🔄 Processing your TikTok video...\n\n⏳ Resolving URL and extracting video...")
         video_bytes, caption = await fetch_video(text)
         if video_bytes:
             file_size = len(video_bytes.getvalue())
             max_size = 50 * 1024 * 1024  # 50MB
             if file_size > max_size:
-                await status_message.edit_text(f"❌ Video too large ({file_size // (1024*1024)}MB)\n\nTelegram bot limit is 50MB. Try a shorter video.")
+                await update_status_message(status_message, f"❌ Video too large ({file_size // (1024*1024)}MB)\n\nTelegram bot limit is 50MB. Try a shorter video.")
                 return
-            await status_message.edit_text("🔄 Processing your TikTok video...\n\n📤 Uploading to Telegram...")
+            await update_status_message(status_message, "🔄 Processing your TikTok video...\n\n📤 Uploading to Telegram...")
             await update.message.reply_video(
                 video=InputFile(video_bytes, filename="tiktok_video.mp4"), 
                 caption=caption,
                 supports_streaming=True
             )
-            await status_message.edit_text("✅ Video downloaded successfully!\n\n🎉 Enjoy your watermark-free TikTok video!")
+            await update_status_message(status_message, "✅ Video downloaded successfully!\n\n🎉 Enjoy your watermark-free TikTok video!")
             await asyncio.sleep(5)
             await status_message.delete()
         else:
-            await status_message.edit_text("❌ Failed to download video or photo.\n\nPossible reasons:\n• Video/photo is private or deleted\n• Region restrictions\n• Network issues\n\nTry again or use a different link.")
+            await update_status_message(status_message, "❌ This link is not a valid TikTok video or photo post, or it could not be downloaded.\n\nPossible reasons:\n• Video/photo is private or deleted\n• Region restrictions\n• Network issues\n• Not a supported TikTok post type\n\nTry again or use a different link.")
     except Exception as e:
         logger.error(f"Download failed: {e}")
-        await status_message.edit_text("❌ Something went wrong while downloading the video or photo.\n\nError: " + str(e)[:100] + "\n\nPlease try again or contact support.")
+        await update_status_message(status_message, "❌ Something went wrong while downloading the video or photo.\n\nError: " + str(e)[:100] + "\n\nPlease try again or contact support.")
 
 # Error handler
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
