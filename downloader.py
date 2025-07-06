@@ -52,24 +52,15 @@ def get_video_dimensions(input_bytes: bytes) -> tuple:
             return None, None
 
 def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
-    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg, with dynamic filter for portrait/landscape."
-    """
-    width, height = get_video_dimensions(input_bytes)
-    if width is None or height is None:
-        # fallback: use crop
-        portrait = False
-    else:
-        portrait = height > width
+    """Convert video to MP4 while preserving original aspect ratio."""
     with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as in_file, \
          tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as out_file:
+
         in_file.write(input_bytes)
         in_file.flush()
-        if portrait:
-            # Portrait: scale and pad, never stretch
-            vf = "scale=iw*min(720/iw\\,1280/ih):ih*min(720/iw\\,1280/ih),pad=720:1280:(720-iw*min(720/iw\\,1280/ih))/2:(1280-ih*min(720/iw\\,1280/ih))/2,setsar=1"
-        else:
-            # Landscape or square: crop to fill
-            vf = "scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1"
+
+        vf = "scale=720:-2,setsar=1"
+
         cmd = [
             'ffmpeg',
             '-analyzeduration', '2147483647',
@@ -84,6 +75,7 @@ def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
             '-threads', '1',
             out_file.name
         ]
+
         try:
             subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             out_file.seek(0)
@@ -91,7 +83,6 @@ def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
         except Exception as e:
             print(f"ffmpeg conversion failed: {e}")
             return input_bytes
-
 async def tikwm_api_request(tiktok_url: str) -> Optional[dict]:
     """Helper to call TikWM API and return parsed JSON or None."""
     service_url = "https://tikwm.com/api/"
