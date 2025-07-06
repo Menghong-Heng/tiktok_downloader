@@ -4,6 +4,8 @@ import re
 import json
 import urllib.parse
 from typing import Optional, Tuple, List
+import tempfile
+import subprocess
 
 async def resolve_redirect(url: str) -> str:
     """Resolve TikTok redirects to get the final URL"""
@@ -28,6 +30,28 @@ async def extract_video_id(url: str) -> Optional[str]:
             return match.group(1)
     
     return None
+
+def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
+    """Convert video bytes to standard MP4 (H.264/AAC) using ffmpeg."""
+    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as in_file, \
+         tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as out_file:
+        in_file.write(input_bytes)
+        in_file.flush()
+        # ffmpeg command: force H.264 video, AAC audio, yuv420p pixel format, keep aspect
+        cmd = [
+            'ffmpeg', '-y', '-i', in_file.name,
+            '-c:v', 'libx264', '-preset', 'fast', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            out_file.name
+        ]
+        try:
+            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out_file.seek(0)
+            return out_file.read()
+        except Exception as e:
+            print(f"ffmpeg conversion failed: {e}")
+            return input_bytes
 
 async def fetch_video(tiktok_url: str) -> Tuple[Optional[BytesIO], Optional[str]]:
     """Fetch TikTok video without watermark - optimized version"""
@@ -74,7 +98,9 @@ async def fetch_video(tiktok_url: str) -> Tuple[Optional[BytesIO], Optional[str]
                             if video_url:
                                 video_response = await client.get(video_url, timeout=60)
                                 if video_response.status_code == 200:
-                                    buffer = BytesIO(video_response.content)
+                                    # Convert to standard MP4
+                                    converted_bytes = convert_to_standard_mp4(video_response.content)
+                                    buffer = BytesIO(converted_bytes)
                                     quality = "HD" if data.get('data', {}).get('hdplay') else "Standard"
                                     return buffer, f"Downloaded via TikWM ({quality}) - {data.get('data', {}).get('title', 'TikTok Video')}"
                     except json.JSONDecodeError:
@@ -97,7 +123,9 @@ async def fetch_video(tiktok_url: str) -> Tuple[Optional[BytesIO], Optional[str]
                 print(f"TikTok API fallback response: {response.status_code}")
                 
                 if response.status_code == 200 and len(response.content) > 1000:
-                    buffer = BytesIO(response.content)
+                    # Convert to standard MP4
+                    converted_bytes = convert_to_standard_mp4(response.content)
+                    buffer = BytesIO(converted_bytes)
                     return buffer, f"Downloaded via TikTok API (ID: {video_id})"
         except Exception as e:
             print(f"TikTok API fallback failed: {e}")
