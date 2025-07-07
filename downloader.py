@@ -95,12 +95,13 @@ def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
             '-probesize', '2147483647',
             '-y', '-i', in_file.name,
             '-vf', vf,
-            '-c:v', 'libx264', '-profile:v', 'high', '-crf', '23', '-preset', 'fast', '-pix_fmt', 'yuv420p',
-            '-c:a', 'aac', '-b:a', '128k',
+            '-c:v', 'libx264', '-profile:v', 'baseline', '-level', '3.1', '-crf', '23', '-preset', 'fast', '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-b:a', '128k', '-ar', '44100',
             '-movflags', '+faststart',
             '-map_metadata', '-1',
             '-metadata:s:v', 'rotate=0',
             '-threads', '1',
+            '-maxrate', '2M', '-bufsize', '4M',
             out_file.name
         ]
         try:
