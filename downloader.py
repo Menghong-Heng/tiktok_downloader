@@ -6,8 +6,6 @@ import urllib.parse
 from typing import Optional, Tuple, List
 import tempfile
 import subprocess
-import yt_dlp
-import asyncio
 
 async def resolve_redirect(url: str) -> str:
     """Resolve TikTok redirects to get the final URL"""
@@ -162,18 +160,62 @@ async def tikwm_api_request(tiktok_url: str) -> Optional[dict]:
     return None
 
 async def fetch_video(tiktok_url: str) -> Tuple[Optional[BytesIO], Optional[str]]:
-    """Fetch TikTok video using yt-dlp and re-encode to H.264 for Telegram/iOS compatibility."""
+    """Fetch TikTok video without watermark - optimized version"""
     try:
-        # Use yt-dlp + ffmpeg pipeline
-        print(f"[yt-dlp] Downloading and re-encoding: {tiktok_url}")
-        video_bytes = await async_download_and_reencode_to_h264(tiktok_url)
-        if video_bytes:
-            buffer = BytesIO(video_bytes)
-            caption = f"Downloaded via yt-dlp (H.264 re-encoded) - TikTok Video"
-            return buffer, caption
-        else:
-            print("❌ yt-dlp/ffmpeg pipeline failed")
+        # Resolve redirects
+        resolved_url = await resolve_redirect(tiktok_url)
+        print(f"Resolved URL: {resolved_url}")
+        
+        # Extract video ID
+        video_id = await extract_video_id(resolved_url)
+        if not video_id:
+            print("❌ Could not extract video ID")
             return None, None
+        
+        print(f"Video ID: {video_id}")
+        
+        # Primary method: TikWM API (POST) - most reliable
+        try:
+            tikwm_data = await tikwm_api_request(tiktok_url)
+            if tikwm_data:
+                video_url = tikwm_data.get('data', {}).get('hdplay') or tikwm_data.get('data', {}).get('play')
+                if video_url:
+                    async with httpx.AsyncClient(timeout=60) as client:
+                        video_response = await client.get(video_url)
+                        if video_response.status_code == 200:
+                            # Convert to standard MP4
+                            converted_bytes = convert_to_standard_mp4(video_response.content)
+                            buffer = BytesIO(converted_bytes)
+                            quality = "HD" if tikwm_data.get('data', {}).get('hdplay') else "Standard"
+                            return buffer, f"Downloaded via TikWM ({quality}) - {tikwm_data.get('data', {}).get('title', 'TikTok Video')}"
+        except Exception as e:
+            print(f"TikWM API failed: {e}")
+        
+        # Fallback method: Direct TikTok API (if TikWM fails)
+        try:
+            api_url = f"https://api.tiktokv.com/aweme/v1/play/?video_id={video_id}&vr_type=0&is_play_url=1&source=PackSourceEnum_PUBLISH&media_id={video_id}&ratio=720p&line=0&file_id={video_id}&quality=720p&watermark=0"
+            api_headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://www.tiktok.com/',
+                'X-Requested-With': 'com.zhiliaoapp.musically',
+                'Accept': 'video/webm,video/ogg,video/*;q=0.9,application/ogg;q=0.7,audio/*;q=0.6,*/*;q=0.5',
+            }
+            
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.get(api_url, headers=api_headers)
+                print(f"TikTok API fallback response: {response.status_code}")
+                
+                if response.status_code == 200 and len(response.content) > 1000:
+                    # Convert to standard MP4
+                    converted_bytes = convert_to_standard_mp4(response.content)
+                    buffer = BytesIO(converted_bytes)
+                    return buffer, f"Downloaded via TikTok API (ID: {video_id})"
+        except Exception as e:
+            print(f"TikTok API fallback failed: {e}")
+        
+        print("❌ All download methods failed")
+        return None, None
+        
     except Exception as e:
         print(f"⚠️ Download error: {e}")
         return None, None
@@ -202,38 +244,3 @@ async def fetch_photos(tiktok_url: str) -> Tuple[Optional[List[BytesIO]], Option
     except Exception as e:
         print(f"⚠️ Photo download error: {e}")
         return None, None
-
-def download_and_reencode_to_h264(url: str) -> bytes:
-    """
-    Download video using yt-dlp and re-encode to H.264 using ffmpeg.
-    Returns the video as bytes (H.264 MP4).
-    """
-    with tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as temp_in, \
-         tempfile.NamedTemporaryFile(suffix='.mp4', delete=True) as temp_out:
-        ydl_opts = {
-            'outtmpl': temp_in.name,
-            'format': 'bestvideo+bestaudio/best',
-            'merge_output_format': 'mp4',
-            'quiet': True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-
-        # Re-encode to H.264 using ffmpeg
-        cmd = [
-            'ffmpeg', '-y', '-i', temp_in.name,
-            '-c:v', 'libx264', '-crf', '23', '-preset', 'fast',
-            '-c:a', 'aac', '-b:a', '128k',
-            '-movflags', '+faststart',
-            temp_out.name
-        ]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        temp_out.seek(0)
-        return temp_out.read()
-
-async def async_download_and_reencode_to_h264(url: str) -> bytes:
-    """
-    Async wrapper for download_and_reencode_to_h264.
-    """
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, download_and_reencode_to_h264, url)
