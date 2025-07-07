@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
+# Install ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg
+
 # Copy requirements first for better caching
 COPY requirements.txt .
 
