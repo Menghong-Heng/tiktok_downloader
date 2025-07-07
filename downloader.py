@@ -105,14 +105,33 @@ def convert_to_standard_mp4(input_bytes: bytes) -> bytes:
             out_file.name
         ]
         try:
-            subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             # Post-process: check codec
+            codec_info = None
             if not check_h264_codec(out_file.name):
                 print("WARNING: Output video is not H.264! Telegram/iOS compatibility may be affected.")
+                # Print codec info for debugging
+                codec_cmd = [
+                    'ffprobe', '-v', 'error', '-select_streams', 'v:0',
+                    '-show_entries', 'stream=codec_name',
+                    '-of', 'default=noprint_wrappers=1:nokey=1', out_file.name
+                ]
+                try:
+                    codec_result = subprocess.run(codec_cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                    codec_info = codec_result.stdout.decode().strip()
+                    print(f"DEBUG: Output video codec: {codec_info}")
+                except Exception as ce:
+                    print(f"DEBUG: Could not get codec info: {ce}")
+            else:
+                print("DEBUG: Output video is H.264 as expected.")
             out_file.seek(0)
             return out_file.read()
-        except Exception as e:
+        except subprocess.CalledProcessError as e:
             print(f"ffmpeg conversion failed: {e}")
+            print(f"ffmpeg stderr: {e.stderr.decode() if e.stderr else 'No stderr output.'}")
+            return input_bytes
+        except Exception as e:
+            print(f"ffmpeg conversion failed (unexpected error): {e}")
             return input_bytes
 async def tikwm_api_request(tiktok_url: str) -> Optional[dict]:
     """Helper to call TikWM API and return parsed JSON or None."""
